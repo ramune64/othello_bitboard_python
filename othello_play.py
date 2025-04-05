@@ -54,7 +54,7 @@ def shift_board(board, shift_value):
     elif shift_value > 0:
         return board << abs(shift_value)  # 左シフト
 #石が置けるマスを判定する関数(rowとcolumnが意味上で反転してるけど動きは正しいので放置)
-def get_legal_square(player_color:str,current_board_w,current_board_b) -> list:
+def get_legal_square(player_color:str,current_board_w:int,current_board_b:int) -> list:
     """
     石が置けるマスを判定する関数
 
@@ -132,6 +132,7 @@ def identify_flip_stone(player_color:str,current_board_w,current_board_b,action:
         action(str):石を置く場所(a1~h8)の記述方式
         mode(int=0):0なら変更が反映された盤面の配列が返り値となる
         mode(int=1):1なら裏返す石の場所が入った配列が返り値となる
+        mode(int=2):2なら0と1両方
 
 
     Returns:
@@ -209,225 +210,6 @@ def identify_flip_stone(player_color:str,current_board_w,current_board_b,action:
             return current_board_w,current_board_b,flip_list
     return flip_list
 
-#オセロを配列の上で実際にプレイできるよ
-def play_othello(mode1:any,mode2:any,mode3:any,record_data:str="",last_winner:str="") -> str:
-    mode1 = str(mode1)
-    mode2 = str(mode2)
-    mode3 = str(mode3)
-    if mode1 == "0":
-        mode3 = "0"
-    if mode2 == "0":
-        print("盤面の一番左上のマスの左上の頂点をクリックせよ")
-        left_up_pos = get_board.get_click_pos()#左クリックされた座標を取得(盤面の左上として扱う)
-        print("盤面の一番右下のマスの右下の頂点をクリックせよ")
-        right_down_pos = get_board.get_click_pos()#左クリックされた座標を取得(盤面の右下として扱う)
-
-        leftup_x,leftup_y = left_up_pos#x,yに分割
-        rightdown_x,rightdown_y = right_down_pos#x,yに分割
-
-        w = rightdown_x-leftup_x#差を取って幅とする
-        h = rightdown_y-leftup_y#差を取って高さとする
-        span_w = int(w/8)
-        span_h = int(h/8)
-    
-    if mode1 == "2":
-        if record_data == "":
-            wthor_data = input("棋譜データを入力:")
-        else:
-            wthor_data = record_data
-    
-    if mode1 == "3" or mode1 == "4":
-        # デバイスの指定 (GPUが使えればcuda、なければcpu)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = dataset_loader.OthelloModel_model8()
-        #model = dataset_loader.DQN()
-        model = model.to(device)  # モデルをGPUに移動
-        model.load_state_dict(torch.load("train8_100000.pth")["model_state_dict"])
-
-
-
-    #白:1,黒:-1,空白:0
-    first_board = np.array([#初期の盤面を表す配列
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 1,-1, 0, 0, 0],
-        [0, 0, 0,-1, 1, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0]
-    ])
-    current_board_white = board_to_bitboard(first_board.copy(),1)&0xFFFFFFFFFFFFFFFF
-    current_board_black = board_to_bitboard(first_board.copy(),-1)&0xFFFFFFFFFFFFFFFF
-    current_board = [current_board_white,current_board_black]
-    #配列を90°回転させる処理(学習データを水増しする為に使う予定)
-    #first_board = np.rot90(first_board,2)
-    #print(first_board)
-    record = ""
-    board_record = {"board":[],"action":[]}
-    while True:
-        #time.sleep(0.01)
-
-
-        check_black = get_legal_square("black",current_board[0],current_board[1])
-        if check_black != []:
-            if mode1 == "2":
-                next_action = wthor_data[:2]
-                #print("残り",len(wthor_data))
-                wthor_data = wthor_data.replace(next_action,"",1)
-                if last_winner == "b":
-                    board_record["board"].append((current_board*-1).tolist())
-                    put_col = convert_l2n[next_action[0]]-1#文字を数字に変換してインデックスの表記に合わせる
-                    put_row = int(next_action[1]) - 1#数字をインデックス表記に合わせる
-                    board_record["action"].append([put_row,put_col])
-            can_put = ""
-            can_put_list = []
-            #print(check_black)
-            for square in check_black:
-                #can_put += " "+convert_n2l[square[1]]+str(square[0]+1)
-                can_put += convert_act_bit2str(square)
-                can_put_list.append(convert_act_bit2str(square))
-            if mode3 == "0":
-                print("置ける場所:"+can_put)
-
-            if mode1 == "0":
-                black_action = input("石を置く場所を入力(黒のターン):")
-            elif mode1 == "1":
-                black_action = random.choice(can_put_list)
-                if mode3 == "0":
-                    print("石を置く場所を入力(黒のターン):"+black_action)
-            elif mode1 == "2":
-                black_action = next_action
-                if mode3 == "0":
-                    print("石を置く場所を入力(黒のターン):"+black_action)
-            elif mode1 == "3":#黒がAI
-                #current_board_black = current_board.copy()*-1
-                predicted_action = predict.predict_action(model,current_board_black)
-                string_pos = convert_n2l[predicted_action[1]]+str(predicted_action[0]+1)
-                black_action = string_pos
-                if mode3 == "0":
-                    print("石を置く場所を入力(黒のターン):"+black_action)
-            elif mode1 == "4":#黒がランダム
-                black_action = random.choice(can_put_list)
-                if mode3 == "0":
-                    print("石を置く場所を入力(黒のターン):"+black_action)
-            elif mode1 == "5":
-                #current_board_black = current_board.copy()*-1
-                _,black_action,othors = minimax(current_board[1],current_board[0],depth=5,alpha=float('-inf'),beta=float('inf'),maximizing_player=True,other_score=True)
-                print(othors)
-                print(black_action)
-                #print(black_action)
-                #black_action = convert_n2l[black_action[1]]+str(black_action[0]+1)
-                if mode3 == "0":
-                    print("石を置く場所を入力(黒のターン):"+black_action)
-
-
-            if mode2 == "0":
-                put_pos_col = convert_l2n[black_action[0]]-1#文字を数字に変換してインデックスの表記に合わせる
-                put_pos_row = int(black_action[1]) - 1#数字をインデックス表記に合わせる
-                pag.click(leftup_x+span_w//2+span_w*put_pos_col,leftup_y+span_h//2+span_h*put_pos_row)
-
-            
-            record += black_action
-            a = identify_flip_stone("black",current_board[0],current_board[1],black_action)
-            current_board[0],current_board[1] = a[0],a[1]
-            if mode3 == "0":
-                print(type(current_board))
-                print(current_board.shape)
-        else:
-            if mode3 == "0":
-                print("黒:パス")
-        #time.sleep(0.01)
-        check_white = get_legal_square("white",current_board[0],current_board[1])
-        if check_white != []:
-            if mode1 == "2":
-                next_action = wthor_data[:2]
-                #print("残り",len(wthor_data))
-                wthor_data = wthor_data.replace(next_action,"",1)
-                if last_winner == "w":
-                    board_record["board"].append((current_board).tolist())
-                    put_col = convert_l2n[next_action[0]]-1#文字を数字に変換してインデックスの表記に合わせる
-                    put_row = int(next_action[1]) - 1#数字をインデックス表記に合わせる
-                    board_record["action"].append([put_row,put_col])
-            can_put = ""
-            can_put_list = []
-            for square in check_white:
-                can_put += " "+convert_n2l[square[1]]+str(square[0]+1)
-                can_put_list.append(convert_n2l[square[1]]+str(square[0]+1))
-            if mode3 == "0":
-                print("置ける場所:"+can_put)
-            if mode1 == "0":
-                white_action = input("石を置く場所を入力(白のターン):")
-            elif mode1 == "1":
-                white_action = random.choice(can_put_list)
-                if mode3 == "0":
-                    print("石を置く場所を入力(白のターン):"+white_action)
-            elif mode1 == "2":
-                white_action = next_action
-                if mode3 == "0":
-                    print("石を置く場所を入力(白のターン):"+white_action)
-            elif mode1 == "3" or mode1 == "5":#白がランダム
-                white_action = random.choice(can_put_list)
-                if mode3 == "0":
-                    print("石を置く場所を入力(白のターン):"+white_action)
-            elif mode1 == "4":#AI
-                current_board_white = current_board.copy()
-                predicted_action = predict.predict_action(model,current_board_white)
-                string_pos = convert_n2l[predicted_action[1]]+str(predicted_action[0]+1)
-                white_action = string_pos
-                if mode3 == "0":
-                    print("石を置く場所を入力(白のターン):"+white_action)
-            if mode1 == "5":
-                #current_board_black = current_board.copy()*-1
-                _,white_action,othors = minimax(current_board[0],current_board[1],depth=5,alpha=float('-inf'),beta=float('inf'),maximizing_player=True,other_score=True)
-                print(othors)
-                print(white_action)
-            if mode2 == "0":
-                put_pos_col = convert_l2n[white_action[0]]-1#文字を数字に変換してインデックスの表記に合わせる
-                put_pos_row = int(white_action[1]) - 1#数字をインデックス表記に合わせる
-                pag.click(leftup_x+span_w//2+span_w*put_pos_col,leftup_y+span_h//2+span_h*put_pos_row)
-
-            
-            record += white_action
-            a = identify_flip_stone("white",current_board[0],current_board[1],white_action)
-            current_board[0],current_board[1] = a[0],a[1]
-            if mode3 == "0":
-                print(current_board)
-        else:
-            if mode3 == "0":
-                print("白:パス")
-        
-        empty = ~(current_board[0] | current_board[1])& 0xFFFFFFFFFFFFFFFF        
-        if (check_white == [] and check_black == []) or (empty == 0):
-            sum_white = current_board[0].bit_count()
-            sum_black = current_board[1].bit_count()
-            dis_count = sum_black-sum_white
-            dis_count = max(dis_count,dis_count*-1)
-            print(record)
-            if mode3 == "0":
-                print("ーー終了ーー")
-                print("黒:",sum_black,"vs","白:",sum_white)
-                print(dis_count,"石差で",end="")
-            if sum_white > sum_black:
-                winner = "w"
-                if mode3 == "0":
-                    print("白の勝ち")
-            elif sum_white < sum_black:
-                winner = "b"
-                if mode3 == "0":
-                    print("黒の勝ち")
-            else:
-                winner = "d"
-                if mode3 == "0":
-                    print("引き分け")
-            if mode3 == "0":
-                print(record)
-            break
-    if last_winner == "" or last_winner == "d":
-        return winner,record
-    else:
-        return winner,record,board_record
-
 def is_terminal(board_w,board_b):
     #if get_legal_square("white",board) == [] and get_legal_square("black",board.copy()*-1) == []:
     if (board_w | board_b).bit_count() == 64:
@@ -448,7 +230,7 @@ def get_color_direction_color(board, x, y, dx, dy, last_color):
     else:
         return "akan"
 
-def get_confirmed_stones(board_w,board_b,mode=0):
+def get_confirmed_stones(board_w,board_b):
     """盤面における確定石の枚数を求める関数"""
     #n = len(board)  # 盤面のサイズ (8x8)
     black_confirmed = 0  # 黒石の確定石を記録する数
@@ -1290,22 +1072,6 @@ def evaluate_board(board_w,board_b):
     alpha = max(0, (turn - 40) / 20)  # 40手目以降、徐々に石の数を重視
     num_w = get_legal_square("white",board_w,board_b)
     num_b = get_legal_square("black",board_w,board_b)
-    """ if board[0,0] != 1:
-        w_cx0 = sum(x in cx_zone0 for x in num_w)
-    elif board[0,0] != -1:
-        b_cx0 = sum(x in cx_zone0 for x in num_b)
-    if board[0,7] != 1:
-        w_cx1 = sum(x in cx_zone1 for x in num_w)
-    elif board[0,7] != -1:
-        b_cx1 = sum(x in cx_zone1 for x in num_b)
-    if board[7,0] != 1:
-        w_cx2 = sum(x in cx_zone2 for x in num_w)
-    elif board[7,0] != -1:
-        b_cx2 = sum(x in cx_zone2 for x in num_b)
-    if board[7,7] != 1:
-        w_cx3 = sum(x in cx_zone3 for x in num_w)
-    elif board[7,7] != -1:
-        b_cx3 = sum(x in cx_zone3 for x in num_b) """
     
     w_cx = sum(x in cx_zone for x in num_w)
     
@@ -1322,35 +1088,13 @@ def evaluate_board(board_w,board_b):
     for idx in range(0,7,2):
         dec_point = 0
         add_point = 0
-        """ s = c_zone[idx]
-        g = c_zone[idx+1]
-        if s[0] == g[0]:
-            increase_idx = 1
-            increase_s = s[1]
-            fix_num = s[0]#固定するインデックスの値
-        else:
-            increase_idx = 0
-            increase_s = s[0]
-            fix_num = s[1] """
+        
         #白について実行
         w_num = 0
         w_num = (board_w&m_e_list[idx//2]).bit_count()
 
         b_num = (board_b&m_e_list[idx//2]).bit_count()
-        """ for edge in range(6):
-            #print("edge",edge)
-            if increase_idx == 1:
-                pos = (fix_num,increase_s+edge)
-            else:
-                pos = (increase_s+edge,fix_num)
-            #print("pos:",pos)
-            #print("color:",board[pos])
-            index = pos[0]*8 + pos[1]
-            only_bit = 1 << index
-            if board_w&only_bit:#該当箇所が白
-                w_num += 1
-            else:
-                break """
+        
         #print(w_num)
         if w_num == 6:
             c = [0,0]
@@ -1360,8 +1104,7 @@ def evaluate_board(board_w,board_b):
                 m_corner -= position
                 c_index = position.bit_length() - 1
                 #既に角にどちらかの石がある場合
-                """ c_pos = corner[idx//2-4]
-                c_index = c_pos[0]*8 + c_pos[1] """
+                
                 c_bit = 1 << c_index
                 adjust_board_w = c_bit & board_w
                 if not empty&c_bit:
@@ -1400,8 +1143,7 @@ def evaluate_board(board_w,board_b):
                 m_corner -= position
                 c_index = position.bit_length() - 1
                 #既に角にどちらかの石がある場合
-                """ c_pos = corner[idx//2-4]
-                c_index = c_pos[0]*8 + c_pos[1] """
+                
                 c_bit = 1 << c_index
                 adjust_board_w = c_bit & board_w
                 if not empty&c_bit:
@@ -1446,24 +1188,12 @@ def evaluate_board(board_w,board_b):
     score = (1-alpha) * (dis_num +  board_score*110/100) + alpha * (w_snum-b_snum)*150/100
         #score = np.sum(board * scores)
         #print(score,np.sum(board)*1.5)
-    """ else:
-        board = w_board.copy() * -1
-        score = sum(sum(board * scores_fin)) """
+    
     #print("score",board)
 
     w_c,b_c = get_confirmed_stones(board_w,board_b)
     w_c,b_c = w_c.bit_count(),b_c.bit_count()
     con_score = (w_c - b_c)
-    """ print(board_score)
-    print("con:",con_score)
-    print("edge",edge_point)
-    print("nomal:",score)
-    print("dis:",dis_num)
-    #print(alpha)
-    print(zennmetu_keikoku)
-    #print(score)
-    #print(con_score*con_weight)
-    print(edge_point) """
     
     return  (score*10 + con_score*con_weight*10 + edge_point*10)/10 + zennmetu_keikoku
 
@@ -1636,173 +1366,7 @@ def minimax(board_w,board_b,depth,alpha, beta,maximizing_player,boardhash=None,o
         if other_score:
             return min_eval,best_move,other_scores
         return min_eval,best_move
-zobristhash_AI = zobrist_hash.ZobristHash(transpo_file="transposition_table_AI.pkl")
-def minimax_useAI(board_w,board_b,depth,alpha, beta,maximizing_player,boardhash=None,other_score=False):
-    #board1 = board.copy()
-    if depth == 0 or is_terminal(board_w,board_b):    #ここが葉ノードなら
-        #print("-----葉ノード-----")
-        #score = evaluate_board(board_w,board_b)
-        #if score == float("inf"):
-            #print("inf")
-            #print(board1)
 
-        return None, None  # 盤面評価値を返す
-    if boardhash == None:
-        boardhash = zobristhash_AI.compute_hash(board_w,board_b)
-    #print("-------depth---------",depth)
-    #print(is_terminal(board1))
-    
-    #print("board",board1)
-    other_scores = {}
-    if maximizing_player:
-        #print("aTrue")
-        legal_list=get_legal_square("white",board_w,board_b)
-        #legal_list = sorted(legal_list,key=lambda x:new_board_and_eval(x,board1.copy(),"white"),reverse=True)
-        if legal_list == []:
-            return minimax_useAI(board_w,board_b,depth-1,alpha,beta,False,boardhash)
-        max_eval = float('-inf')
-        best_move = None
-        for move in legal_list:
-            #move_string = convert_n2l[move[1]]+str(move[0]+1)
-            move_string = convert_act_bit2str(move)
-            if depth == 1:
-                index = move[0]*8 + move[1]
-                eval_list = predict.predict_minimax(board_w,board_b)
-                eval = eval_list[index]
-                return eval,None
-            #print("depth:",depth)
-            #print("move:",move_string)
-            #print("move",move_string)
-            #print("depth",depth)
-            #print("mae",board1)
-            new_board_w,new_board_b,flip_list = identify_flip_stone("white",board_w,board_b,move_string,mode=2)
-            """ board_combined = bitboard_to_numpy(new_board_w, new_board_b)
-            print(board_combined) """
-            #print("new",new_board)
-            new_boardhash = zobristhash_AI.update_hash(boardhash,move[0],move[1],0,1)#新たに置かれた石の処理
-            for flip in flip_list:
-                new_boardhash = zobristhash_AI.update_hash(new_boardhash,flip[0],flip[1],-1,1)#ひっくり返る石の処理
-            #print(new_boardhash)
-            eval = zobristhash_AI.get_saved_score(new_boardhash,depth-1,False)
-            if eval != None:
-                pass
-                #print("既出や1")
-            else:
-                new_board_90_w,new_board_90_b = rotate90(board_w),rotate90(board_b)
-                boardhash_90 = zobristhash_AI.compute_hash(new_board_90_w,new_board_90_b)
-                eval = zobristhash_AI.get_saved_score(boardhash_90,depth-1,False)
-                if eval is None:
-                    new_board_180_w,new_board_180_b = rotate90(new_board_90_w),rotate90(new_board_90_b)
-                    boardhash_180 = zobristhash_AI.compute_hash(new_board_180_w,new_board_180_b)
-                    eval = zobristhash_AI.get_saved_score(boardhash_180,depth-1,False)
-                    if eval is None:
-                        new_board_270_w,new_board_270_b = rotate90(new_board_180_w),rotate90(new_board_180_b)
-                        boardhash_270 = zobristhash_AI.compute_hash(new_board_270_w,new_board_270_b)
-                        eval = zobristhash_AI.get_saved_score(boardhash_270,depth-1,False)
-                        if eval is None:
-                            #if eval == float('inf') or eval == float('-inf'):
-                            #    print(eval)
-                            #    print(new_board)
-                            #    print(depth-1)
-                            eval ,_ = minimax_useAI(new_board_w,new_board_b,depth-1,alpha, beta,False,new_boardhash)
-                            if eval == None:
-                                index = move[0]*8 + move[1]
-                                eval_list = predict.predict_minimax(board_w,board_b)
-                                eval = eval_list[index]
-                                return eval,None
-                            zobristhash_AI.save_score(new_boardhash,eval,depth-1,False)#評価値と盤面の対応を保存
-            #print("score:",eval)
-            if other_score:
-                other_scores[move_string] = eval
-
-                #transposition_table[boardhash] = eval
-            if eval > max_eval:
-                max_eval = eval
-                best_move = move_string
-            alpha = max(alpha, eval)  # αを更新
-            if beta <= alpha:  # αβ枝刈り
-                break
-        if other_score:
-            return max_eval,best_move,other_scores
-        return max_eval,best_move
-    else:
-        #print("aFalse")
-        legal_list=get_legal_square("black",board_w,board_b)
-        #legal_list = sorted(legal_list,key=lambda x:new_board_and_eval(x,board1.copy(),"black"),reverse=False)
-        min_eval = float('inf')
-        best_move = None
-        #evals = []
-        evals_c = []
-        if legal_list == []:
-            return minimax(board_w,board_b,depth-1,alpha,beta,True,boardhash)
-
-        for move in legal_list:
-            move_string = convert_act_bit2str(move)
-            #print(move_string)
-            #print("move",move_string)
-            #print("depth",depth)
-            #print("mae",board1)
-            if depth == 1:
-                index = move[0]*8 + move[1]
-                eval_list = predict.predict_minimax(board_w,board_b)
-                eval = eval_list[index]
-                return eval,None
-            
-            
-            new_board_w,new_board_b,flip_list = identify_flip_stone("black",board_w,board_b,move_string,mode=2)
-            #print(a)
-            
-            #print("new",new_board)
-            new_boardhash = zobristhash_AI.update_hash(boardhash,move[0],move[1],0,-1)#新たに置かれた石の処理
-            for flip in flip_list:
-                new_boardhash = zobristhash_AI.update_hash(new_boardhash,flip[0],flip[1],1,-1)#ひっくり返る石の処理
-            eval = zobristhash_AI.get_saved_score(new_boardhash,depth-1,True)
-            if eval != None:
-                pass
-                #print("既出や1")
-            else:
-                new_board_90_w,new_board_90_b = rotate90(board_w),rotate90(board_b)
-                boardhash_90 = zobristhash_AI.compute_hash(new_board_90_w,new_board_90_b)
-                eval = zobristhash_AI.get_saved_score(boardhash_90,depth-1,True)
-                if eval is None:
-                    new_board_180_w,new_board_180_b = rotate90(new_board_90_w),rotate90(new_board_90_b)
-                    boardhash_180 = zobristhash_AI.compute_hash(new_board_180_w,new_board_180_b)
-                    eval = zobristhash_AI.get_saved_score(boardhash_180,depth-1,True)
-                    if eval is None:
-                        new_board_270_w,new_board_270_b = rotate90(new_board_180_w),rotate90(new_board_180_b)
-                        boardhash_270 = zobristhash_AI.compute_hash(new_board_270_w,new_board_270_b)
-                        eval = zobristhash_AI.get_saved_score(boardhash_270,depth-1,True)
-                        if eval is None:
-                            #if eval == float('inf') or eval == float('-inf'):
-                            #    print(eval)
-                            #    print(new_board)
-                            #    print(depth-1)
-                            eval ,_ = minimax_useAI(new_board_w,new_board_b,depth-1,alpha, beta,True,new_boardhash)
-                            if eval == None:
-                                index = move[0]*8 + move[1]
-                                eval_list = predict.predict_minimax(board_w,board_b)
-                                eval = eval_list[index]
-                                return eval,None
-                            zobristhash_AI.save_score(new_boardhash,eval,depth-1,True)#評価値と盤面の対応を保存
-            if other_score:
-                other_scores[move_string] = eval
-                #transposition_table[boardhash] = eval
-            #evals.append(eval)
-            if eval < min_eval:
-                min_eval = eval
-                best_move = move_string
-            beta = min(beta, eval)  # αを更新
-            if beta <= alpha:  # αβ枝刈り
-                break
-        #if min_eval == float("inf"):
-            #print("min")
-            #print(min_eval)
-            #print(evals)
-            #print(evals_c)
-            #print(legal_list)
-        if other_score:
-            return min_eval,best_move,other_scores
-        return min_eval,best_move
 
 
 
@@ -1842,4 +1406,5 @@ def bitboard_to_numpy(bitboard_w, bitboard_b):
 
 
 if __name__ == "__main__":
+    _,black_action,othors = minimax(current_board[0],current_board[1],depth=5,alpha=float('-inf'),beta=float('inf'),maximizing_player=True,other_score=True)
     pass
